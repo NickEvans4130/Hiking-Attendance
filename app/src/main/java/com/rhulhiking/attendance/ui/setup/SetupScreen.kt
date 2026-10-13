@@ -30,7 +30,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rhulhiking.attendance.ui.common.AuthResolutionHandler
 
 @Composable
-fun SetupScreen(onDone: () -> Unit, viewModel: SetupViewModel = hiltViewModel()) {
+fun SetupScreen(
+    onDone: () -> Unit,
+    onOpenNfcTest: () -> Unit,
+    viewModel: SetupViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
     AuthResolutionHandler(viewModel)
@@ -84,6 +88,8 @@ fun SetupScreen(onDone: () -> Unit, viewModel: SetupViewModel = hiltViewModel())
                 ) { Text("Continue") }
             }
         }
+
+        TextButton(onClick = onOpenNfcTest) { Text("Test card reading on this phone") }
 
         if (state.busy) CircularProgressIndicator()
         state.error?.let {

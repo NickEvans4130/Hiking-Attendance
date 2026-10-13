@@ -40,7 +40,7 @@ Google Sheet, and changes the status column from `Signed Up` to `HERE`.
 - **The NFC chip must support MIFARE Classic.** Many phones have NFC but can't read MIFARE Classic,
   including most Google Pixels. Most Samsung phones and others with NXP NFC chips work. The app
   checks this on launch and explains if the phone is unsupported. Use **Settings > NFC card read
-  test** to confirm a phone reads cards before relying on it at a hike.
+  test** (or **Test card reading on this phone** on the setup screen) to confirm a phone reads cards before relying on it at a hike.
 
 ## One-time setup
 
@@ -142,7 +142,16 @@ the signed-in account isn't an Editor.
 
 You need JDK 17 or newer and the Android SDK with API 37 installed. Android Studio includes both.
 
-**Debug build**, quickest for trying it out:
+**Quickest: one command.** With the phone plugged in and USB debugging on, this builds, installs
+and launches the debug build:
+
+```sh
+scripts/install.sh              # debug build
+scripts/install.sh --release    # signed release build (needs keystore.properties)
+scripts/install.sh --serial <id> # when more than one device is connected
+```
+
+**Debug build by hand:**
 
 ```sh
 ./gradlew assembleDebug

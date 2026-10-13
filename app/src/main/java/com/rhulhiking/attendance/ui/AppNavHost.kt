@@ -15,10 +15,13 @@ import com.rhulhiking.attendance.ui.setup.SetupScreen
 fun AppNavHost(startDestination: Any, navController: NavHostController = rememberNavController()) {
     NavHost(navController, startDestination = startDestination) {
         composable<SetupRoute> {
-            SetupScreen(onDone = {
-                // Restart at the picker so its tab list reflects a newly chosen spreadsheet.
-                navController.navigate(PickerRoute) { popUpTo(navController.graph.id) { inclusive = true } }
-            })
+            SetupScreen(
+                onDone = {
+                    // Restart at the picker so its tab list reflects a newly chosen spreadsheet.
+                    navController.navigate(PickerRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+                },
+                onOpenNfcTest = { navController.navigate(NfcTestRoute) },
+            )
         }
         composable<PickerRoute> {
             PickerScreen(
