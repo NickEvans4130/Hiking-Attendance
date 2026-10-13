@@ -66,6 +66,12 @@ class SmartCardManagerTest {
     }
 
     @Test
+    fun `stale tag SecurityException becomes card moved error`() {
+        val card = FakeCard(acceptKeyAtAttempt = null, throwOnAuthAttempt = 2, throwable = SecurityException("Tag is out of date"))
+        assertEquals(NfcReadResult.Error(SmartCardManager.CARD_MOVED), manager.readCard(card))
+    }
+
+    @Test
     fun `null card is not mifare`() {
         assertEquals(NfcReadResult.Error(SmartCardManager.NOT_MIFARE), manager.readCard(null))
     }

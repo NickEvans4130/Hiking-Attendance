@@ -1,6 +1,10 @@
 package com.rhulhiking.attendance
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.nfc.NfcAdapter
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -9,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,9 +60,9 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) {
                     val status by effectiveStatus.collectAsStateWithLifecycle()
                     val start by mainViewModel.startDestination.collectAsStateWithLifecycle()
-                    if (status == NfcStatus.Available) {
-                        start?.let { AppNavHost(startDestination = it) }
-                    } else {
+                    // The nav host stays composed underneath so an NFC toggle mid-hike keeps the session.
+                    start?.let { AppNavHost(startDestination = it) }
+                    if (status != NfcStatus.Available) Surface(Modifier.fillMaxSize()) {
                         NfcUnavailableScreen(
                             status = status,
                             onOpenNfcSettings = { startActivity(Intent(Settings.ACTION_NFC_SETTINGS)) },
@@ -71,6 +76,26 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** NFC switched on or off from quick settings while the app is in front. */
+    private val adapterStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = refreshNfcStatus()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        ContextCompat.registerReceiver(
+            this,
+            adapterStateReceiver,
+            IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
+    override fun onStop() {
+        super.onStop()
+        unregisterReceiver(adapterStateReceiver)
     }
 
     override fun onResume() {

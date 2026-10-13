@@ -32,6 +32,12 @@ sealed class SheetsException(message: String, cause: Throwable? = null) : Except
     class NotFound :
         SheetsException("Spreadsheet or tab not found. Check the spreadsheet link and that the hike tab still exists.")
 
+    class ProtectedCell :
+        SheetsException("The status cell is protected in the sheet. Ask the sheet owner to let this account edit it.")
+
+    class OutsideGrid :
+        SheetsException("A configured column is outside this tab's grid. Check the column letters in Settings.")
+
     /** The user must sign in or grant access again. [resolution] launches the consent UI when available. */
     class AuthRequired(val resolution: PendingIntent? = null) :
         SheetsException("Your Google sign-in needs to be renewed. Sign in again to continue.")

@@ -161,10 +161,12 @@ class RestSheetsRepository(
             code == 403 && (body.contains("SERVICE_DISABLED") || message.contains("has not been used")) ->
                 SheetsException.ApiDisabled()
             code == 403 && body.contains("ACCESS_TOKEN_SCOPE_INSUFFICIENT") -> SheetsException.AuthRequired()
+            code == 403 && message.contains("protected", ignoreCase = true) -> SheetsException.ProtectedCell()
             code == 403 -> SheetsException.NoAccess()
             code == 404 -> SheetsException.NotFound()
             // A range naming a tab that doesn't exist is a 400, not a 404.
             code == 400 && message.contains("Unable to parse range") -> SheetsException.NotFound()
+            code == 400 && message.contains("exceeds grid limits") -> SheetsException.OutsideGrid()
             else -> SheetsException.Unexpected(code, message.ifEmpty { "no details" })
         }
     }

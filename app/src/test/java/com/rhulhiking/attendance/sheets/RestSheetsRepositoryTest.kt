@@ -115,6 +115,14 @@ class RestSheetsRepositoryTest {
         assertTrue(expectError(400, """{"error":{"code":400,"message":"Unable to parse range: 'Gone'!B:B"}}""") is SheetsException.NotFound)
     }
 
+    @Test fun `403 on protected range explains protection`() = runTest {
+        assertTrue(expectError(403, """{"error":{"code":403,"message":"You are trying to edit a protected cell or object.","status":"PERMISSION_DENIED"}}""") is SheetsException.ProtectedCell)
+    }
+
+    @Test fun `400 beyond grid points at column settings`() = runTest {
+        assertTrue(expectError(400, """{"error":{"code":400,"message":"Range ('Hike'!Z5) exceeds grid limits. Max rows: 1000, max columns: 13"}}""") is SheetsException.OutsideGrid)
+    }
+
     @Test fun `429 backs off and retries`() = runTest {
         server.enqueue(MockResponse().setResponseCode(429))
         server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "2"))

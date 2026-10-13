@@ -72,6 +72,9 @@ class SmartCardManager @Inject constructor(
             }
         } catch (e: IOException) {
             NfcReadResult.Error(CARD_MOVED)
+        } catch (e: SecurityException) {
+            // "Tag is out of date": the card left and the Tag handle is stale.
+            NfcReadResult.Error(CARD_MOVED)
         } catch (e: Exception) {
             NfcReadResult.Error(e.message ?: "Unknown NFC error")
         } finally {
