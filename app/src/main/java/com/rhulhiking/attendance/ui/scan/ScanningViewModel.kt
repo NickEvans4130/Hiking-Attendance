@@ -8,20 +8,33 @@ import com.rhulhiking.attendance.attendance.CheckInOutcome
 import com.rhulhiking.attendance.attendance.CheckInService
 import com.rhulhiking.attendance.attendance.HikeTarget
 import com.rhulhiking.attendance.attendance.RosterSummary
+import com.rhulhiking.attendance.attendance.StudentIds
 import com.rhulhiking.attendance.auth.GoogleAuthManager
 import com.rhulhiking.attendance.feedback.FeedbackPlayer
 import com.rhulhiking.attendance.nfc.NfcReadResult
+import com.rhulhiking.attendance.net.NetworkMonitor
 import com.rhulhiking.attendance.nfc.SmartCardManager
+import com.rhulhiking.attendance.queue.PendingCheckIn
+import com.rhulhiking.attendance.queue.PendingQueue
+import com.rhulhiking.attendance.queue.SyncScheduler
 import com.rhulhiking.attendance.settings.AppSettings
 import com.rhulhiking.attendance.settings.SettingsRepository
 import com.rhulhiking.attendance.sheets.SheetsException
 import com.rhulhiking.attendance.ui.ScanRoute
 import com.rhulhiking.attendance.ui.common.AuthAwareViewModel
+import com.rhulhiking.attendance.util.Clock
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -35,8 +48,12 @@ data class ScanUiState(
     val listError: String? = null,
     val display: ScanDisplay = ScanDisplay.Ready,
     val pendingCount: Int = 0,
+    val needsAttention: List<PendingCheckIn> = emptyList(),
+    val online: Boolean = true,
+    val walkInsEnabled: Boolean = true,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ScanningViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -44,6 +61,10 @@ class ScanningViewModel @Inject constructor(
     private val service: CheckInService,
     private val settings: SettingsRepository,
     private val feedback: FeedbackPlayer,
+    private val queue: PendingQueue,
+    private val syncScheduler: SyncScheduler,
+    private val network: NetworkMonitor,
+    private val clock: Clock,
     smartCardManager: SmartCardManager,
 ) : AuthAwareViewModel(auth) {
 
@@ -58,6 +79,24 @@ class ScanningViewModel @Inject constructor(
     init {
         refresh()
         viewModelScope.launch { smartCardManager.results.collect(::onCardRead) }
+        viewModelScope.launch {
+            settings.settings.collect { s -> _state.update { it.copy(walkInsEnabled = s.walkInsEnabled) } }
+        }
+        viewModelScope.launch {
+            settings.settings.map { it.spreadsheetId }.distinctUntilChanged().filterNotNull()
+                .flatMapLatest { id ->
+                    combine(queue.observePendingCount(id, tab), queue.observeNeedsAttention(id, tab), ::Pair)
+                }
+                .collect { (count, attention) -> _state.update { it.copy(pendingCount = count, needsAttention = attention) } }
+        }
+        viewModelScope.launch {
+            // Back online: refresh the list (the sync worker flushes the queue on its own).
+            network.online.drop(1).collect { online ->
+                _state.update { it.copy(online = online) }
+                if (online) refresh()
+            }
+        }
+        _state.update { it.copy(online = network.online.value) }
     }
 
     fun refresh() = viewModelScope.launch {
@@ -94,12 +133,41 @@ class ScanningViewModel @Inject constructor(
     private suspend fun checkIn(rawId: String) {
         val s = settings.current()
         val target = target(s) ?: return
+        // No signal: queue straight away instead of waiting for a request to time out.
+        if (!network.online.value) return queueTap(target, rawId)
         show(ScanDisplay.Working)
         try {
             val batch = service.checkIn(target, s.columns, rawId)
             applyBatch(batch, s)
         } catch (e: SheetsException) {
-            handleFailure(e, rawId) { sheetLock.withLock { checkIn(rawId) } }
+            if (e.isTransient) queueTap(target, rawId)
+            else handleFailure(e, rawId) { sheetLock.withLock { checkIn(rawId) } }
+        }
+    }
+
+    private suspend fun queueTap(target: HikeTarget, rawId: String) {
+        val id = StudentIds.normalize(rawId)
+        if (id.isEmpty()) return showProblem("Tap again", "No student number could be read from this card.")
+        queue.enqueue(target.spreadsheetId, target.tab, id, clock.nowMillis())
+        syncScheduler.schedule()
+        feedback.queued()
+        show(ScanDisplay.Queued(id))
+    }
+
+    /** A queued tap that couldn't be matched at sync time: add as walk-in, or drop it. */
+    fun resolveAttention(entry: PendingCheckIn, addAsWalkIn: Boolean): Job = viewModelScope.launch {
+        if (!addAsWalkIn) return@launch queue.remove(listOf(entry.id))
+        sheetLock.withLock {
+            val s = settings.current()
+            show(ScanDisplay.Working)
+            try {
+                val batch = service.addWalkIn(HikeTarget(entry.spreadsheetId, entry.tab), s.columns, entry.studentId)
+                queue.remove(listOf(entry.id))
+                applyBatch(batch, s)
+            } catch (e: SheetsException) {
+                if (e.isTransient) showProblem("Walk-in not added", "Still no connection. Try again when you have signal.")
+                else handleFailure(e, entry.studentId) { resolveAttention(entry, true) }
+            }
         }
     }
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -28,10 +29,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rhulhiking.attendance.attendance.Attendee
+import com.rhulhiking.attendance.queue.PendingCheckIn
+import com.rhulhiking.attendance.queue.QueueFlusher
 import com.rhulhiking.attendance.ui.common.AuthResolutionHandler
 import com.rhulhiking.attendance.ui.theme.StatusColors
 
@@ -59,7 +65,7 @@ fun ScanningScreen(onEndSession: () -> Unit, viewModel: ScanningViewModel = hilt
     BackHandler(onBack = onEndSession)
 
     Box(Modifier.fillMaxSize()) {
-        ScanningContent(state, onEndSession, viewModel::refresh)
+        ScanningContent(state, onEndSession, viewModel::refresh, viewModel::resolveAttention)
         if (state.display != ScanDisplay.Ready) {
             OutcomeOverlay(
                 display = state.display,
@@ -81,7 +87,16 @@ private fun KeepScreenOn() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScanningContent(state: ScanUiState, onEndSession: () -> Unit, onRefresh: () -> Unit) {
+private fun ScanningContent(
+    state: ScanUiState,
+    onEndSession: () -> Unit,
+    onRefresh: () -> Unit,
+    onResolve: (PendingCheckIn, Boolean) -> Unit,
+) {
+    var showAttention by remember { mutableStateOf(false) }
+    if (showAttention && state.needsAttention.isNotEmpty()) {
+        AttentionDialog(state.needsAttention, state.walkInsEnabled, onResolve) { showAttention = false }
+    }
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -129,6 +144,19 @@ private fun ScanningContent(state: ScanUiState, onEndSession: () -> Unit, onRefr
             }
         }
 
+        if (!state.online) {
+            Text(
+                "No signal: taps are queued and will sync automatically",
+                color = StatusColors.OnInfo,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.fillMaxWidth().background(StatusColors.Info).padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+        if (state.needsAttention.isNotEmpty()) {
+            OutlinedButton(onClick = { showAttention = true }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Text("${state.needsAttention.size} queued tap(s) need attention", color = MaterialTheme.colorScheme.error)
+            }
+        }
         state.listError?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp))
         }
@@ -137,6 +165,36 @@ private fun ScanningContent(state: ScanUiState, onEndSession: () -> Unit, onRefr
             AttendeeList(state.summary?.attendees.orEmpty())
         }
     }
+}
+
+@Composable
+private fun AttentionDialog(
+    entries: List<PendingCheckIn>,
+    walkInsEnabled: Boolean,
+    onResolve: (PendingCheckIn, Boolean) -> Unit,
+    onClose: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+        title = { Text("Queued taps that couldn't sync") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(entries, key = { it.id }) { e ->
+                    Column {
+                        Text(e.studentId, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(e.note.orEmpty(), style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (walkInsEnabled && e.note == QueueFlusher.NOT_SIGNED_UP) {
+                                TextButton(onClick = { onResolve(e, true) }) { Text("Add as walk-in") }
+                            }
+                            TextButton(onClick = { onResolve(e, false) }) { Text("Dismiss") }
+                        }
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable
