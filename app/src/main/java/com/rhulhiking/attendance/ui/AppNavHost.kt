@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import com.rhulhiking.attendance.ui.nfc.NfcDebugScreen
 import com.rhulhiking.attendance.ui.picker.PickerScreen
 import com.rhulhiking.attendance.ui.scan.ScanningScreen
+import com.rhulhiking.attendance.ui.settings.SettingsScreen
 import com.rhulhiking.attendance.ui.setup.SetupScreen
 
 @Composable
@@ -15,7 +16,8 @@ fun AppNavHost(startDestination: Any, navController: NavHostController = remembe
     NavHost(navController, startDestination = startDestination) {
         composable<SetupRoute> {
             SetupScreen(onDone = {
-                navController.navigate(PickerRoute) { popUpTo(SetupRoute) { inclusive = true } }
+                // Restart at the picker so its tab list reflects a newly chosen spreadsheet.
+                navController.navigate(PickerRoute) { popUpTo(navController.graph.id) { inclusive = true } }
             })
         }
         composable<PickerRoute> {
@@ -31,7 +33,11 @@ fun AppNavHost(startDestination: Any, navController: NavHostController = remembe
             ScanningScreen(onEndSession = { navController.popBackStack(PickerRoute, inclusive = false) })
         }
         composable<SettingsRoute> {
-            SetupScreen(onDone = { navController.popBackStack(PickerRoute, inclusive = false) })
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onChangeAccountOrSheet = { navController.navigate(SetupRoute) },
+                onOpenNfcTest = { navController.navigate(NfcTestRoute) },
+            )
         }
         composable<NfcTestRoute> { NfcDebugScreen() }
     }

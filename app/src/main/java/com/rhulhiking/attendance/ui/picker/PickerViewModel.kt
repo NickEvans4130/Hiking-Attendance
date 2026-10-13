@@ -41,6 +41,13 @@ class PickerViewModel @Inject constructor(
             _state.update { it.copy(hidden = s.hiddenTabs, rememberHidden = s.rememberHiddenTabs) }
             load()
         }
+        // Pick up hidden-tab changes made elsewhere (e.g. reset in settings). Session-only
+        // hiding is left alone when "remember" is off.
+        viewModelScope.launch {
+            settings.settings.collect { s ->
+                if (s.rememberHiddenTabs) _state.update { it.copy(hidden = s.hiddenTabs) }
+            }
+        }
     }
 
     fun load() = viewModelScope.launch { loadTabs() }
