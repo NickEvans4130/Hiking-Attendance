@@ -1,0 +1,29 @@
+# Gradle / build output
+.gradle/
+build/
+**/build/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Machine-specific config and secrets: never commit these
+local.properties
+google-services.json
+client_secret*.json
+*.keystore
+*.jks
+keystore.properties
+signing.properties
+*.p12
+*.pem
+
+# Release artefacts
+*.apk
+*.aab
+release/
