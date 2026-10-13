@@ -6,6 +6,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -16,7 +17,8 @@ import com.rhulhiking.attendance.nfc.NfcCapabilityChecker
 import com.rhulhiking.attendance.nfc.NfcReaderController
 import com.rhulhiking.attendance.nfc.NfcStatus
 import com.rhulhiking.attendance.nfc.SmartCardManager
-import com.rhulhiking.attendance.ui.nfc.NfcDebugScreen
+import com.rhulhiking.attendance.ui.AppNavHost
+import com.rhulhiking.attendance.ui.MainViewModel
 import com.rhulhiking.attendance.ui.nfc.NfcUnavailableScreen
 import com.rhulhiking.attendance.ui.theme.HikingTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var smartCardManager: SmartCardManager
     @Inject lateinit var capabilityChecker: NfcCapabilityChecker
 
+    private val mainViewModel: MainViewModel by viewModels()
     private lateinit var reader: NfcReaderController
     private val nfcStatus = MutableStateFlow(NfcStatus.Available)
     /** The user chose "try anyway" on a phone that doesn't advertise MIFARE Classic support. */
@@ -51,8 +54,9 @@ class MainActivity : ComponentActivity() {
             HikingTheme {
                 Surface(Modifier.fillMaxSize()) {
                     val status by effectiveStatus.collectAsStateWithLifecycle()
+                    val start by mainViewModel.startDestination.collectAsStateWithLifecycle()
                     if (status == NfcStatus.Available) {
-                        NfcDebugScreen()
+                        start?.let { AppNavHost(startDestination = it) }
                     } else {
                         NfcUnavailableScreen(
                             status = status,

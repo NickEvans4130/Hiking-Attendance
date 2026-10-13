@@ -3,6 +3,7 @@
 
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Not required so the app installs anywhere and can explain why a phone is unsupported. -->
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
 

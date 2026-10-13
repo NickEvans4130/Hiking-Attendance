@@ -10,6 +10,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.ClearTokenRequest
@@ -80,6 +81,8 @@ class GoogleAuthManager @Inject constructor(
             }
         } catch (e: GetCredentialCancellationException) {
             SignInResult.Cancelled
+        } catch (e: NoCredentialException) {
+            SignInResult.Failed("No Google account on this phone. Add one in Settings > Accounts, then try again.")
         } catch (e: GetCredentialException) {
             DebugLog.w(TAG, e) { "Credential Manager sign-in failed" }
             SignInResult.Failed(e.message ?: "Google sign-in failed")
@@ -93,7 +96,7 @@ class GoogleAuthManager @Inject constructor(
         } catch (e: ApiException) {
             throw mapApiException(e)
         }
-        acceptResult(result)
+        acceptResult(result).also { rememberEmail(result) }
     }
 
     /**
@@ -107,9 +110,14 @@ class GoogleAuthManager @Inject constructor(
             throw mapApiException(e)
         }
         mutex.withLock { acceptResult(result) }
-        val email = result.toGoogleSignInAccount()?.email
-        if (email != null && settings.current().accountEmail == null) settings.setAccountEmail(email)
-        return email ?: settings.current().accountEmail
+        rememberEmail(result)
+        return settings.current().accountEmail
+    }
+
+    /** Records which account was authorised when sign-in went straight through AuthorizationClient. */
+    private suspend fun rememberEmail(result: AuthorizationResult) {
+        val email = result.toGoogleSignInAccount()?.email ?: return
+        if (settings.current().accountEmail == null) settings.setAccountEmail(email)
     }
 
     override suspend fun invalidate(token: String) {
