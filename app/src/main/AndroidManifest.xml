@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Not required so the app installs anywhere and can explain why a phone is unsupported. -->
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
 
